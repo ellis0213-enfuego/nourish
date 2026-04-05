@@ -1344,7 +1344,7 @@ export default function App() {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
-          model:"claude-sonnet-4-6",
+          model:"claude-sonnet-4-5",
           max_tokens:400,
           system:`You are an expert sports nutritionist and personal health coach embedded in the Nourish app. Provide a specific, data-driven post-meal analysis in 2-3 sentences. Always reference actual numbers and remaining targets. Factor in the user's specific goal, GLP-1 status and injection timing, time of day, and what meals remain. Flag any meaningful concern (protein lag, calorie surplus, post-injection appetite window). No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{ role:"user", content:
@@ -1473,7 +1473,7 @@ Give a specific, insightful 2-3 sentence post-meal analysis and forward-looking 
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:550,
+          model:"claude-sonnet-4-5",max_tokens:550,
           system:`You are an expert nutritionist and performance coach delivering a data-driven daily debrief. Write 4-5 sentences that cover: (1) overall caloric and protein performance with exact percentages, (2) what the macro breakdown means for their specific goal, (3) hydration and supplement adherence assessment, (4) one specific concern or positive pattern worth naming, and (5) one precise, actionable recommendation for tomorrow tied to their actual numbers and goal. Use their name. No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{role:"user",content:
             `Daily debrief for ${user.name||"this user"}.
@@ -1541,7 +1541,7 @@ ${buildUserContext().fitnessCtx}`;
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:600,
+          model:"claude-sonnet-4-5",max_tokens:600,
           system:buildCoachContext(),
           messages:[{role:"user",content:q}]
         })
@@ -1605,7 +1605,7 @@ ${buildUserContext().fitnessCtx}`;
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:600,
+          model:"claude-sonnet-4-5",max_tokens:600,
           system:`You are an expert nutritionist delivering a rigorous weekly performance review. Analyze the data like a coach reviewing game film — specific, evidence-based, and forward-focused. Write 5-6 sentences covering: (1) consistency score with what was missed and why it matters, (2) caloric accuracy — average vs target and what the variance means, (3) protein performance — days at target vs missed, and the gap's impact on their specific goal, (4) weight trend direction and what it implies about their current approach, (5) the single highest-leverage behavior change for next week, stated as a concrete action. Use exact numbers throughout. No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{role:"user",content:
             `Weekly review for ${user.name||"this user"}.
@@ -1650,7 +1650,7 @@ Write the weekly check-in.`
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:600,
+          model:"claude-sonnet-4-5",max_tokens:600,
           system:`You are a helpful grocery assistant. Return ONLY valid JSON, no markdown. Structure: [{"category":"Proteins","items":[{"name":"Chicken breast","detail":"~2 lbs"},{"name":"Greek yogurt 0%","detail":"2 containers"}]},{"category":"Dairy","items":[...]},{"category":"Produce","items":[...]},{"category":"Pantry","items":[...]}]. Include only real grocery items. Keep detail field short (quantity/amount). Maximum 6 items per category.`,
           messages:[{role:"user",content:
             `Generate a weekly grocery list for someone with goal: ${GOALS.find(x=>x.id===user.goal?.primary)?.label||"fat loss"}, daily targets ${(user.macros||macros).calories} cal / ${(user.macros||macros).protein}g protein. Their saved recipes are: ${recipes.map(r=>r.name).join(", ")||"none"}. Their favorite foods include: ${favFoods.join(", ")||"none specified"}. Common ingredients they already use: ${[...new Set(recipeIngredients)].slice(0,15).join(", ")||"none"}. Build a practical weekly grocery list from these.`
@@ -1745,7 +1745,7 @@ Write the weekly check-in.`
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:1000,
+          model:"claude-sonnet-4-5",max_tokens:1000,
           system:`You are a nutrition expert. Return ONLY valid JSON (no markdown, no backticks, no explanation) with this exact structure: {"name":"string","description":"string","servings":number,"tags":["breakfast","lunch","dinner","snack","high-protein","meal-prep"],"ingredients":[{"name":"string","amount":"string","unit":"string","cal":number,"pro":number,"carb":number,"fat":number}]}. Use realistic nutrition values per the amount listed.`,
           messages:[{role:"user",content:`Create a recipe for: ${prompt}`}]
         })
@@ -1783,7 +1783,7 @@ Write the weekly check-in.`
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:1000,
+          model:"claude-sonnet-4-5",max_tokens:1000,
           system:`You are a recipe extraction assistant. Extract recipe details from the photo and return ONLY valid JSON with no markdown or backticks. Structure: {"name":"string","description":"one sentence description","servings":number,"tags":["breakfast","lunch","dinner","snack","high-protein","meal-prep"],"ingredients":[{"name":"string","amount":"string","unit":"string","cal":number,"pro":number,"carb":number,"fat":number}]}. Estimate realistic nutrition values per ingredient amount listed. If this is not a recipe, return {"error":"not_a_recipe","message":"brief explanation"}.`,
           messages:[{role:"user",content:[
             {type:"image",source:{type:"base64",media_type:recipePhotoMime,data:b64}},
@@ -1830,7 +1830,7 @@ Write the weekly check-in.`
       const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:"claude-sonnet-4-6",max_tokens:1000,
+          model:"claude-sonnet-4-5",max_tokens:1000,
           system:`You are a nutrition label reader. Return ONLY valid JSON, no markdown. Structure: {"name":"product name","brand":"brand name or empty string","servingOptions":[{"label":"serving description e.g. 1 serving (28g)","cal":number,"pro":number,"carb":number,"fat":number}]}. Include ALL serving size options listed on the label. Use 0 for any value you cannot clearly read. If the image is not a nutrition facts label, return {"error":"not_a_label","message":"one sentence explanation"}.`,
           messages:[{role:"user",content:[
             {type:"image",source:{type:"base64",media_type:photoMime,data:b64}},
