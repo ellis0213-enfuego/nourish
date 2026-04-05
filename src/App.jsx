@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { DB } from "./storage.js";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const GOALS = [
@@ -321,11 +322,7 @@ const sumMeals=(meals)=>{
 };
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const DB={
-  async get(k){ try{const r=await window.storage.get(k);return r?JSON.parse(r.value):null;}catch{return null;}},
-  async set(k,v){ try{await window.storage.set(k,JSON.stringify(v));}catch{}},
-  async del(k){ try{await window.storage.delete(k);}catch{}},
-};
+// DB imported from ./storage.js
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 const CSS=`
@@ -1343,7 +1340,7 @@ export default function App() {
       const mealFoods=mealItems.map(i=>`${i.name} (${i.cal} cal, ${i.pro}g pro, ${i.carb}g carb, ${i.fat}g fat)`).join("; ")||"no items logged";
       const hour=new Date().getHours();
       const timeOfDay=hour<10?"morning":hour<13?"late morning":hour<17?"afternoon":"evening";
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/claude", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
@@ -1473,7 +1470,7 @@ Give a specific, insightful 2-3 sentence post-meal analysis and forward-looking 
     const calPct=tgt.calories?Math.round(totals.cal/tgt.calories*100):0;
     const proPct=tgt.protein?Math.round(totals.pro/tgt.protein*100):0;
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:550,
@@ -1541,7 +1538,7 @@ ${buildUserContext().fitnessCtx}`;
     const q=question||coachQuery; if(!q.trim()) return;
     setCoachLoading(true); setCoachAnswer(null);
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
@@ -1605,7 +1602,7 @@ ${buildUserContext().fitnessCtx}`;
       return d.cal>0?`${dayName}: ${d.cal} cal / ${d.pro}g pro`:`${dayName}: not logged`;
     }).join(" | ");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
@@ -1650,7 +1647,7 @@ Write the weekly check-in.`
     const favFoods=library.filter(f=>(f.tags||[]).includes("favorite")).map(f=>f.name);
     const recipeIngredients=recipes.flatMap(r=>(r.ingredients||[]).map(i=>i.name));
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
@@ -1745,7 +1742,7 @@ Write the weekly check-in.`
   const generateRecipeWithClaude=async(prompt)=>{
     setGeneratingRecipe(true); setGeneratedDraft(null);
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
@@ -1783,7 +1780,7 @@ Write the weekly check-in.`
     setScanningRecipe(true); setRecipePhotoError(null); setGeneratedDraft(null);
     try{
       const b64=recipePhotoPreview.split(",")[1];
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
@@ -1830,7 +1827,7 @@ Write the weekly check-in.`
     setScanningLabel(true); setPhotoScanError(null);
     try{
       const b64=photoPreview.split(",")[1];
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/claude",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
