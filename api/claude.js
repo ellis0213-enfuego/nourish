@@ -11,8 +11,7 @@ export default async function handler(req, res) {
   const allowedOrigins = [
     "http://localhost:5173",   // Vite dev server
     "http://localhost:3000",   // Vercel dev
-    "https://nourish-pdet.vercel.app
-", // ← UPDATE to your actual domain
+    "https://nourish-pdet.vercel.app",
   ];
   const origin = req.headers.origin || "";
   if (allowedOrigins.includes(origin)) {

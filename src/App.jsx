@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { DB } from "./storage.js";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const GOALS = [
@@ -28,6 +27,15 @@ const GLP1_DOSES = {
   Other:   ["Starting dose","Mid dose","Max dose"],
 };
 const DAYS  = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const MUSCLE_GROUPS = ["Chest","Back","Shoulders","Biceps","Triceps","Legs","Core"];
+const WORKOUT_TYPES = [
+  {id:"weights",icon:"🏋️",label:"Weights"},
+  {id:"cardio", icon:"🚴",label:"Cardio"},
+  {id:"walk",   icon:"🚶",label:"Walk"},
+  {id:"sport",  icon:"🎾",label:"Sport"},
+];
+const DEF_SETS = ()=>Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
+const REC_SETS_MIN = 10;
 const PREFS = ["High Protein","Low Carb","No Gluten","No Dairy","Meal Prep","Quick Meals","Kid Friendly","Heart Healthy"];
 const NOTIFS = [
   { key:"morningProtein",    label:"Morning protein reminder",  sub:"Start the day protein-first",        glp1:false },
@@ -203,7 +211,7 @@ const DEF_USER = {
   glp1:{ active:false, medication:"Zepbound", currentDose:"2.5mg", injectionDay:"Wednesday", startDate:"" },
   notifications:{ enabled:true, morningProtein:true, middayCheckin:true, eveningWarning:true,
     weightLog:true, hydration:true, injectionReminder:true, postInjection:true, doseEscalation:true },
-  settings:{ displayMacros:["cal","pro","carb","fat"], sortFoodBy:"ratio" },
+  settings:{ displayMacros:["cal","pro","carb","fat"], sortFoodBy:"ratio", coachingStyle:"encouraging" },
   preferences:[], createdAt:null,
 };
 const DEF_MACROS = { calories:1900, protein:170, carbs:160, fat:60, tdee:0 };
@@ -228,7 +236,7 @@ const TEST_PROFILE = {
   goal:{ primary:"fat_loss", targetWeightLbs:210, targetWeeks:24, targetDate:"2026-09-20", weeklyRate:1.4, deficit:650, startDate:new Date().toISOString() },
   glp1:{ active:true, medication:"Zepbound", currentDose:"5mg", injectionDay:"Wednesday", startDate:"2026-03-19" },
   notifications:{ enabled:true, morningProtein:true, middayCheckin:true, eveningWarning:true, weightLog:true, hydration:true, injectionReminder:true, postInjection:true, doseEscalation:true },
-  settings:{ displayMacros:["cal","pro","carb","fat"], sortFoodBy:"ratio" },
+  settings:{ displayMacros:["cal","pro","carb","fat"], sortFoodBy:"ratio", coachingStyle:"encouraging" },
   preferences:["High Protein","Meal Prep"],
   macros:{ calories:1900, protein:190, carbs:160, fat:58, tdee:2550 },
   createdAt:new Date().toISOString(),
@@ -313,7 +321,11 @@ const sumMeals=(meals)=>{
 };
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-// DB imported from ./storage.js
+const DB={
+  async get(k){ try{const r=await window.storage.get(k);return r?JSON.parse(r.value):null;}catch{return null;}},
+  async set(k,v){ try{await window.storage.set(k,JSON.stringify(v));}catch{}},
+  async del(k){ try{await window.storage.delete(k);}catch{}},
+};
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 const CSS=`
@@ -492,6 +504,39 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
 .fi-cal{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--kcal);width:36px;text-align:right}
 .fi-del{width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--tx3);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;flex-shrink:0}
 .fi-del:active{color:var(--red)}
+.fi-edit-btn{width:28px;height:28px;border-radius:8px;border:none;background:transparent;color:var(--tx3);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s;flex-shrink:0}
+.fi-edit-btn:active{color:var(--acc)}
+/* food item tappable */
+.food-item{background:var(--sf);border:1.5px solid var(--br);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}
+.food-item:active{border-color:var(--acc)}
+
+/* ── FOOD EDIT SHEET ── */
+.edit-sheet{background:var(--sf);border-radius:24px 24px 0 0;border:1.5px solid var(--br);
+  width:100%;max-width:430px;margin:0 auto;max-height:88vh;
+  display:flex;flex-direction:column;animation:su .25s ease}
+.edit-sheet-head{padding:20px 20px 14px;flex-shrink:0;border-bottom:1px solid var(--br)}
+.edit-sheet-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:2px}
+.edit-sheet-sub{font-size:12px;color:var(--tx2)}
+.edit-sheet-body{flex:1;overflow-y:auto;padding:16px 20px 8px}
+.serving-stepper{display:flex;align-items:center;justify-content:space-between;
+  background:var(--sf2);border:1.5px solid var(--br);border-radius:14px;
+  padding:12px 16px;margin-bottom:16px}
+.serving-stepper-label{font-size:13px;color:var(--tx2)}
+.serving-stepper-controls{display:flex;align-items:center;gap:14px}
+.stepper-btn{width:34px;height:34px;border-radius:10px;border:1.5px solid var(--br);
+  background:var(--sf);color:var(--tx);font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;line-height:1;transition:all .15s}
+.stepper-btn:active{transform:scale(.88);border-color:var(--acc)}
+.stepper-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;
+  color:var(--acc);min-width:36px;text-align:center}
+.edit-macro-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.edit-macro-cell{background:var(--sf2);border-radius:12px;padding:10px 12px}
+.edit-macro-label{font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.edit-macro-input{width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--br);
+  color:var(--tx);font-family:'Syne',sans-serif;font-size:18px;font-weight:800;
+  outline:none;padding:2px 0;-webkit-appearance:none;transition:border-color .15s}
+.edit-macro-input:focus{border-color:var(--acc)}
+.edit-sheet-foot{padding:12px 20px 28px;flex-shrink:0;display:flex;gap:10px}
 /* ── BACK NAV ── */
 .back-btn{display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--tx2);font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
 .back-btn:active{opacity:.6}
@@ -537,6 +582,49 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
   color:var(--acc2);font-size:11px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;
   white-space:nowrap}
 .water-btn:active{transform:scale(.95)}
+
+/* ── FITNESS / MOVEMENT ── */
+.movement-bar{margin:0 20px 10px;background:var(--sf);border:1.5px solid var(--br);border-radius:16px;padding:14px 16px}
+.movement-bar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.movement-bar-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:800;color:var(--tx)}
+.steps-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.steps-input{flex:1;background:var(--sf2);border:1.5px solid var(--br);border-radius:10px;padding:9px 12px;color:var(--tx);font-family:'Syne',sans-serif;font-size:16px;font-weight:700;outline:none;-webkit-appearance:none}
+.steps-input:focus{border-color:var(--acc)}
+.workout-chip{background:var(--sf2);border:1.5px solid var(--br);border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.workout-chip-icon{font-size:18px;flex-shrink:0}
+.workout-chip-info{flex:1;min-width:0}
+.workout-chip-title{font-size:13px;font-weight:600;color:var(--tx)}
+.workout-chip-sub{font-size:11px;color:var(--tx2);margin-top:2px}
+.workout-form{background:var(--sf2);border:1.5px solid var(--br);border-radius:14px;padding:14px;margin-top:8px}
+.wf-type-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.wf-type-btn{padding:8px 4px;border-radius:10px;border:1.5px solid var(--br);background:var(--sf);color:var(--tx2);font-size:12px;cursor:pointer;text-align:center;transition:all .15s}
+.wf-type-btn.on{border-color:var(--acc);background:var(--acc);color:#fff;font-weight:700}
+.wf-effort-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:12px}
+.wf-effort-btn{padding:8px;border-radius:10px;border:1.5px solid var(--br);background:var(--sf);color:var(--tx2);font-size:12px;cursor:pointer;text-align:center;transition:all .15s}
+.wf-effort-btn.on{font-weight:700}
+.mg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.mg-cell{background:var(--sf);border:1.5px solid var(--br);border-radius:10px;padding:6px 4px;text-align:center}
+.mg-name{font-size:9px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.mg-stepper{display:flex;align-items:center;justify-content:center;gap:4px}
+.mg-btn{width:20px;height:20px;border-radius:5px;border:1px solid var(--br);background:var(--sf2);color:var(--tx);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.mg-val{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--acc);min-width:16px;text-align:center}
+.vol-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.vol-label{font-size:11px;color:var(--tx2);width:72px;flex-shrink:0}
+.vol-track{flex:1;height:10px;background:var(--br);border-radius:5px;overflow:hidden}
+.vol-fill{height:100%;border-radius:5px;transition:width .4s ease}
+.vol-count{font-size:11px;font-weight:700;width:24px;text-align:right;flex-shrink:0}
+.vol-target{font-size:9px;color:var(--tx3);width:24px;text-align:right;flex-shrink:0}
+
+/* ── COACHING STYLE ── */
+.coach-style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.coach-style-card{border:1.5px solid var(--br);border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer;background:var(--sf);transition:all .15s}
+.coach-style-card:active{transform:scale(.96)}
+.coach-style-card.on{border-color:var(--acc);background:var(--acc)}
+.coach-style-card.on .cs-label{color:#fff}
+.coach-style-card.on .cs-sub{color:rgba(255,255,255,.75)}
+.cs-icon{font-size:22px;margin-bottom:5px}
+.cs-label{font-family:'Syne',sans-serif;font-size:12px;font-weight:800;color:var(--tx);margin-bottom:2px}
+.cs-sub{font-size:10px;color:var(--tx2);line-height:1.4}
 
 /* ── RECIPES TAB ── */
 .recipes-screen{padding:0 0 110px}
@@ -997,6 +1085,17 @@ export default function App() {
   const [completedMeals, setCompletedMeals] = useState({});   // { breakfast: true, ... }
   const [mealAnalysis,   setMealAnalysis]   = useState({});   // { breakfast: { text, expanded } }
   const [analyzingMeal,  setAnalyzingMeal]  = useState(null);
+
+  // ── Food edit state ──
+  const [editItem,    setEditItem]    = useState(null); // { logId, meal, _baseCal, _basePro, _baseCarb, _baseFat }
+  const [editServings,setEditServings]= useState(1);
+  const [editForm,    setEditForm]    = useState({name:"",serving:"",cal:"",pro:"",carb:"",fat:""});
+
+  // ── Fitness state ──
+  const [fitnessData, setFitnessData] = useState({steps:0,workouts:[]});
+  const [weekFitness, setWeekFitness] = useState([]);
+  const [showWForm,   setShowWForm]   = useState(false);
+  const [wForm,       setWForm]       = useState({type:"weights",duration:"",effort:"Moderate",notes:"",sportName:"",sets:DEF_SETS()});
   const [sortBy,         setSortBy]         = useState("ratio");
   const [showSortMenu,   setShowSortMenu]   = useState(false);
   const [recommendingMeal, setRecommendingMeal] = useState(null); // { meals: {}, projectedTotals: {} }
@@ -1210,7 +1309,21 @@ export default function App() {
       if(!items.length) return null;
       return `${MEAL_LABELS[m]}: ${items.map(i=>i.name).join(", ")} (${items.reduce((s,i)=>s+i.cal,0)} cal, ${items.reduce((s,i)=>s+i.pro,0)}g protein)`;
     }).filter(Boolean).join("\n");
-    return {tgt,goalObj,actObj,latestW,avg7W,weeklyRateW,goalW,startW,lostSoFar,toGo,progressPct,glp1Context,mealSummary};
+    // Fitness context
+    const weekSetsCtx=Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
+    weekFitness.forEach(day=>(day.workouts||[]).forEach(w=>MUSCLE_GROUPS.forEach(g=>{weekSetsCtx[g]+=(w.sets?.[g]||0);})));
+    const weeklyWorkoutDays=weekFitness.filter(d=>(d.workouts||[]).length>0).length;
+    const todayWorkoutStr=(fitnessData.workouts||[]).length>0
+      ?(fitnessData.workouts).map(w=>`${w.type} ${w.duration}min ${w.effort}${w.type==="weights"?` (${MUSCLE_GROUPS.filter(g=>w.sets?.[g]>0).map(g=>`${g}:${w.sets[g]}sets`).join(",")})`:""}`).join("; ")
+      :"none";
+    const fitnessCtx=`FITNESS TODAY: Steps ${fitnessData.steps||0}, Workouts: ${todayWorkoutStr}. WEEKLY: ${weeklyWorkoutDays}/7 days trained. Weekly sets: ${MUSCLE_GROUPS.map(g=>`${g}:${weekSetsCtx[g]}`).join(", ")}.`;
+    const styleMap={
+      encouraging:"Tone: warm, motivating, and positive. Celebrate effort and progress. Reframe setbacks constructively. Lead with what's going well before addressing gaps.",
+      factual:"Tone: data-focused and direct. Present numbers and observations without motivational commentary. Be concise and objective.",
+      tough_love:"Tone: direct, honest, and high-accountability. Name gaps clearly. Don't soften misses. Hold the user to their stated goals. Skip the praise for ordinary results.",
+    };
+    const styleDirective=styleMap[user.settings?.coachingStyle||"encouraging"];
+    return {tgt,goalObj,actObj,latestW,avg7W,weeklyRateW,goalW,startW,lostSoFar,toGo,progressPct,glp1Context,mealSummary,fitnessCtx,styleDirective};
   };
 
   // ── Complete a meal + Claude API analysis ──
@@ -1230,13 +1343,13 @@ export default function App() {
       const mealFoods=mealItems.map(i=>`${i.name} (${i.cal} cal, ${i.pro}g pro, ${i.carb}g carb, ${i.fat}g fat)`).join("; ")||"no items logged";
       const hour=new Date().getHours();
       const timeOfDay=hour<10?"morning":hour<13?"late morning":hour<17?"afternoon":"evening";
-      const res = await fetch("/api/claude", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514",
           max_tokens:400,
-          system:`You are an expert sports nutritionist and personal health coach embedded in the Nourish app. Provide a specific, data-driven post-meal analysis in 2-3 sentences. Always reference actual numbers and remaining targets. Factor in the user's specific goal, GLP-1 status and injection timing, time of day, and what meals remain. Flag any meaningful concern (protein lag, calorie surplus, post-injection appetite window). Be direct — no filler phrases like "great job" or "keep it up." No markdown, no bullet points.`,
+          system:`You are an expert sports nutritionist and personal health coach embedded in the Nourish app. Provide a specific, data-driven post-meal analysis in 2-3 sentences. Always reference actual numbers and remaining targets. Factor in the user's specific goal, GLP-1 status and injection timing, time of day, and what meals remain. Flag any meaningful concern (protein lag, calorie surplus, post-injection appetite window). No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{ role:"user", content:
             `User: ${user.name||"Unknown"}, ${user.age}yo ${user.sex}, ${ctx.latestW?ctx.latestW+" lbs, ":""}goal: ${ctx.goalObj.label}${ctx.toGo?`, ${ctx.toGo} lbs to target`:""}.
 ${ctx.glp1Context}
@@ -1306,6 +1419,32 @@ Give a specific, insightful 2-3 sentence post-meal analysis and forward-looking 
     setSuppEditId(null);
   };
 
+  // ── Fitness helpers ──
+  const fitnessKey = d => `nourish:fitness:${d}`;
+  useEffect(()=>{ DB.get(fitnessKey(logDate)).then(v=>setFitnessData(v||{steps:0,workouts:[]})); },[logDate]);
+  useEffect(()=>{
+    (async()=>{
+      const days=[];
+      for(let i=6;i>=0;i--){
+        const d=new Date(); d.setDate(d.getDate()-i);
+        const ds=d.toISOString().split("T")[0];
+        const fd=await DB.get(fitnessKey(ds));
+        days.push({date:ds,...(fd||{steps:0,workouts:[]})});
+      }
+      setWeekFitness(days);
+    })();
+  },[logDate]);
+  const saveFitness=async(updated)=>{ setFitnessData(updated); await DB.set(fitnessKey(logDate),updated); };
+  const logSteps=(v)=>saveFitness({...fitnessData,steps:+v||0});
+  const addWorkout=()=>{
+    if(!wForm.duration) return;
+    const w={...wForm,id:uid(),loggedAt:new Date().toISOString()};
+    saveFitness({...fitnessData,workouts:[...(fitnessData.workouts||[]),w]});
+    setWForm({type:"weights",duration:"",effort:"Moderate",notes:"",sportName:"",sets:DEF_SETS()});
+    setShowWForm(false);
+  };
+  const deleteWorkout=(id)=>saveFitness({...fitnessData,workouts:(fitnessData.workouts||[]).filter(w=>w.id!==id)});
+
   // ── Streak helpers ──
   const yestStr=()=>{ const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().split("T")[0]; };
   useEffect(()=>{ DB.get("nourish:streaks").then(v=>{ if(v) setStreaks(v); }); },[]);
@@ -1334,11 +1473,11 @@ Give a specific, insightful 2-3 sentence post-meal analysis and forward-looking 
     const calPct=tgt.calories?Math.round(totals.cal/tgt.calories*100):0;
     const proPct=tgt.protein?Math.round(totals.pro/tgt.protein*100):0;
     try{
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:550,
-          system:`You are an expert nutritionist and performance coach delivering a data-driven daily debrief. Write 4-5 sentences that cover: (1) overall caloric and protein performance with exact percentages, (2) what the macro breakdown means for their specific goal, (3) hydration and supplement adherence assessment, (4) one specific concern or positive pattern worth naming, and (5) one precise, actionable recommendation for tomorrow tied to their actual numbers and goal. Use their name. Be honest about gaps — don't soften misses. No generic praise. No markdown, no bullet points.`,
+          system:`You are an expert nutritionist and performance coach delivering a data-driven daily debrief. Write 4-5 sentences that cover: (1) overall caloric and protein performance with exact percentages, (2) what the macro breakdown means for their specific goal, (3) hydration and supplement adherence assessment, (4) one specific concern or positive pattern worth naming, and (5) one precise, actionable recommendation for tomorrow tied to their actual numbers and goal. Use their name. No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{role:"user",content:
             `Daily debrief for ${user.name||"this user"}.
 PROFILE: ${user.age}yo ${user.sex}, ${ctx.latestW?ctx.latestW+" lbs":"weight not logged"}${ctx.avg7W?` (7-day avg: ${ctx.avg7W} lbs${ctx.weeklyRateW!==null?`, ${+ctx.weeklyRateW>0?`losing ~${ctx.weeklyRateW} lbs/wk`:`gaining ~${Math.abs(+ctx.weeklyRateW)} lbs/wk`}`:""})`:""}.  Goal: ${ctx.goalObj.label}${ctx.toGo?`. ${ctx.toGo} lbs to target (${ctx.progressPct||0}% there)`:""}.
@@ -1350,6 +1489,7 @@ WATER: ${waterOz}/${waterGoal}oz (${Math.round(waterOz/waterGoal*100)}%).
 SUPPLEMENTS: ${suppDone}/${suppTotal} taken${suppTotal>0?` (${supplements.filter(s=>!suppLog[s.id]).map(s=>s.name).join(", ")||"all done"} missed)`:""}.
 MEALS COMPLETED: ${mealsDone}/4.
 STREAKS: Logging ${streaks.logging?.count||0} days, protein goal ${streaks.protein?.count||0} days.
+${ctx.fitnessCtx}
 
 Write the daily debrief.`
           }]
@@ -1372,7 +1512,7 @@ Write the daily debrief.`
     const actObj=ctx.actObj;
     const suppsDone=supplements.filter(s=>suppLog[s.id]).map(s=>s.name);
     const suppsRemaining=supplements.filter(s=>!suppLog[s.id]).map(s=>s.name);
-    return `You are an expert personal nutritionist, health coach, and wellness advisor embedded in the Nourish app. You have complete access to this user's real data. Answer their question with the depth and specificity of a professional coach who knows them well. Reference their actual numbers, name them directly, and tie advice back to their specific goal. If the question has a clear correct answer, give it — don't hedge. If trade-offs exist, name them explicitly. 2-5 sentences unless a detailed breakdown is genuinely needed. No markdown, no bullet points.
+    return `You are an expert personal nutritionist, health coach, and wellness advisor embedded in the Nourish app. You have complete access to this user's real data. Answer their question with the depth and specificity of a professional coach who knows them well. Reference their actual numbers, name them directly, and tie advice back to their specific goal. If the question has a clear correct answer, give it — don't hedge. If trade-offs exist, name them explicitly. 2-5 sentences unless a detailed breakdown is genuinely needed. No markdown, no bullet points.\n\n${ctx.styleDirective}
 
 USER PROFILE:
 Name: ${user.name||"User"} | Age: ${user.age||"?"} | Sex: ${user.sex||"?"} | Activity: ${actObj.label} (TDEE ~${tgt.tdee||"unknown"} cal)
@@ -1392,14 +1532,16 @@ SUPPLEMENTS: ${suppsDone.length?`Taken — ${suppsDone.join(", ")}`:""} ${suppsR
 STREAKS: Logging ${streaks.logging?.count||0} days | Protein goal ${streaks.protein?.count||0} days | Weigh-in ${streaks.weighIn?.count||0} days
 
 SAVED RECIPES: ${recipes.map(r=>r.name).join(", ")||"none yet"}
-FAVORITE FOODS: ${library.filter(f=>(f.tags||[]).includes("favorite")).map(f=>f.name).join(", ")||"none starred yet"}`;
+FAVORITE FOODS: ${library.filter(f=>(f.tags||[]).includes("favorite")).map(f=>f.name).join(", ")||"none starred yet"}
+
+${buildUserContext().fitnessCtx}`;
   };
 
   const askCoach=async(question)=>{
     const q=question||coachQuery; if(!q.trim()) return;
     setCoachLoading(true); setCoachAnswer(null);
     try{
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
@@ -1463,11 +1605,11 @@ FAVORITE FOODS: ${library.filter(f=>(f.tags||[]).includes("favorite")).map(f=>f.
       return d.cal>0?`${dayName}: ${d.cal} cal / ${d.pro}g pro`:`${dayName}: not logged`;
     }).join(" | ");
     try{
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
-          system:`You are an expert nutritionist delivering a rigorous weekly performance review. Analyze the data like a coach reviewing game film — specific, evidence-based, and forward-focused. Write 5-6 sentences covering: (1) consistency score with what was missed and why it matters, (2) caloric accuracy — average vs target and what the variance means, (3) protein performance — days at target vs missed, and the gap's impact on their specific goal, (4) weight trend direction and what it implies about their current approach, (5) the single highest-leverage behavior change for next week, stated as a concrete action. Use exact numbers throughout. Don't soften gaps — name them directly and explain their consequence. No markdown, no bullet points.`,
+          system:`You are an expert nutritionist delivering a rigorous weekly performance review. Analyze the data like a coach reviewing game film — specific, evidence-based, and forward-focused. Write 5-6 sentences covering: (1) consistency score with what was missed and why it matters, (2) caloric accuracy — average vs target and what the variance means, (3) protein performance — days at target vs missed, and the gap's impact on their specific goal, (4) weight trend direction and what it implies about their current approach, (5) the single highest-leverage behavior change for next week, stated as a concrete action. Use exact numbers throughout. No markdown, no bullet points.\n\n${ctx.styleDirective}`,
           messages:[{role:"user",content:
             `Weekly review for ${user.name||"this user"}.
 PROFILE: ${user.age}yo ${user.sex}, goal: ${ctx.goalObj.label}, activity: ${ctx.actObj.label}.
@@ -1484,6 +1626,8 @@ Calorie variance: ±${calVariance} cal/day ${calVariance>300?"(high inconsistenc
 Protein target hit (≥90%): ${proteinDays}/${loggedDays} logged days
 
 STREAKS: Logging ${streaks.logging?.count||0}-day streak, protein goal ${streaks.protein?.count||0}-day streak, weigh-in ${streaks.weighIn?.count||0}-day streak.
+
+${ctx.fitnessCtx}
 
 Write the weekly check-in.`
           }]
@@ -1506,7 +1650,7 @@ Write the weekly check-in.`
     const favFoods=library.filter(f=>(f.tags||[]).includes("favorite")).map(f=>f.name);
     const recipeIngredients=recipes.flatMap(r=>(r.ingredients||[]).map(i=>i.name));
     try{
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:600,
@@ -1601,7 +1745,7 @@ Write the weekly check-in.`
   const generateRecipeWithClaude=async(prompt)=>{
     setGeneratingRecipe(true); setGeneratedDraft(null);
     try{
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
@@ -1639,7 +1783,7 @@ Write the weekly check-in.`
     setScanningRecipe(true); setRecipePhotoError(null); setGeneratedDraft(null);
     try{
       const b64=recipePhotoPreview.split(",")[1];
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
@@ -1686,7 +1830,7 @@ Write the weekly check-in.`
     setScanningLabel(true); setPhotoScanError(null);
     try{
       const b64=photoPreview.split(",")[1];
-      const res=await fetch("/api/claude",{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",max_tokens:1000,
@@ -1841,6 +1985,7 @@ Write the weekly check-in.`
       DB.del(`nourish:log:${logDate}`),
       DB.del(`nourish:water:${logDate}`),
       DB.del(`nourish:supplog:${logDate}`),
+      DB.del(`nourish:fitness:${logDate}`),
       DB.del(`nourish:debrief:${todayStr()}`),
       DB.del(`nourish:checkin:${weekKey()}`),
     ]);
@@ -1855,6 +2000,8 @@ Write the weekly check-in.`
     setDebriefText(null);            setCheckInText(null);   setCheckInDate(null);
     setCoachOpen(false);             setCoachAnswer(null);   setCoachQuery("");
     setGroceryOpen(false);           setGroceryData(null);
+    setFitnessData({steps:0,workouts:[]});  setWeekFitness([]);
+    setShowWForm(false);
     setConfirm(false);               setScreen("splash");    setDevTaps(0);
   };
 
@@ -1879,6 +2026,48 @@ Write the weekly check-in.`
   };
   const removeFoodFromMeal=(meal,logId)=>{
     saveLog({...dayLog,[meal]:dayLog[meal].filter(i=>i.logId!==logId)});
+  };
+
+  // ── Food item edit ──
+  const openEditItem=(meal,item)=>{
+    setEditItem({logId:item.logId, meal,
+      _baseCal:item._baseCal??item.cal,   _basePro:item._basePro??item.pro,
+      _baseCarb:item._baseCarb??item.carb,_baseFat:item._baseFat??item.fat,
+      _baseServing:item._baseServing??item.serving,
+    });
+    setEditServings(item._servings??1);
+    setEditForm({name:item.name,serving:item.serving,
+      cal:String(item.cal),pro:String(item.pro),carb:String(item.carb),fat:String(item.fat)});
+  };
+  const applyServings=(s,base)=>{
+    const round1=(v)=>Math.round(v*10)/10;
+    setEditServings(s);
+    setEditForm(f=>({...f,
+      cal:String(Math.round(base._baseCal*s)),
+      pro:String(round1(base._basePro*s)),
+      carb:String(round1(base._baseCarb*s)),
+      fat:String(round1(base._baseFat*s)),
+      serving:s===1?base._baseServing:`${s} × ${base._baseServing}`,
+    }));
+  };
+  const saveEditedFood=()=>{
+    if(!editItem) return;
+    const {logId,meal,...base}=editItem;
+    const updated={...dayLog,[meal]:dayLog[meal].map(i=>i.logId!==logId?i:{
+      ...i,
+      name:editForm.name||i.name,
+      serving:editForm.serving||i.serving,
+      cal:+editForm.cal||0,
+      pro:+editForm.pro||0,
+      carb:+editForm.carb||0,
+      fat:+editForm.fat||0,
+      _servings:editServings,
+      _baseCal:base._baseCal,_basePro:base._basePro,
+      _baseCarb:base._baseCarb,_baseFat:base._baseFat,
+      _baseServing:base._baseServing,
+    })};
+    saveLog(updated);
+    setEditItem(null);
   };
   const navigateDate=(dir)=>{
     const d=new Date(logDate+"T12:00:00");
@@ -2525,6 +2714,134 @@ Write the weekly check-in.`
             </div>
           )}
 
+          {/* ── MOVEMENT ── */}
+          <div className="movement-bar">
+            <div className="movement-bar-head">
+              <div className="movement-bar-title">🏃 Movement</div>
+            </div>
+            {/* Steps */}
+            <div className="steps-row">
+              <div style={{fontSize:11,color:"var(--tx2)",width:40,flexShrink:0}}>Steps</div>
+              <input className="steps-input" type="number" inputMode="numeric" placeholder="0"
+                value={fitnessData.steps||""}
+                onChange={e=>logSteps(e.target.value)}/>
+              <div style={{fontSize:11,color:"var(--tx3)",flexShrink:0}}>/ 10k</div>
+            </div>
+            {/* Workout list */}
+            {(fitnessData.workouts||[]).map(w=>{
+              const wt=WORKOUT_TYPES.find(t=>t.id===w.type)||WORKOUT_TYPES[0];
+              const totalSets=w.type==="weights"?MUSCLE_GROUPS.reduce((s,g)=>s+(w.sets?.[g]||0),0):0;
+              return(
+                <div key={w.id} className="workout-chip">
+                  <div className="workout-chip-icon">{wt.icon}</div>
+                  <div className="workout-chip-info">
+                    <div className="workout-chip-title">
+                      {wt.label}{w.sportName?` — ${w.sportName}`:""} · {w.duration}min · {w.effort}
+                    </div>
+                    {w.type==="weights"&&totalSets>0&&(
+                      <div className="workout-chip-sub">
+                        {MUSCLE_GROUPS.filter(g=>(w.sets?.[g]||0)>0).map(g=>`${g} ${w.sets[g]}`).join(" · ")} sets
+                      </div>
+                    )}
+                    {w.notes&&<div className="workout-chip-sub" style={{color:"var(--tx3)"}}>{w.notes}</div>}
+                  </div>
+                  <button style={{background:"none",border:"none",color:"var(--tx3)",fontSize:14,cursor:"pointer",padding:4,flexShrink:0}}
+                    onClick={()=>deleteWorkout(w.id)}>✕</button>
+                </div>
+              );
+            })}
+            {/* Add workout form */}
+            {showWForm?(
+              <div className="workout-form">
+                <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Type</div>
+                <div className="wf-type-row">
+                  {WORKOUT_TYPES.map(t=>(
+                    <button key={t.id} className={`wf-type-btn ${wForm.type===t.id?"on":""}`}
+                      onClick={()=>setWForm(f=>({...f,type:t.id,sets:DEF_SETS()}))}>
+                      <div style={{fontSize:18,marginBottom:2}}>{t.icon}</div>
+                      <div>{t.label}</div>
+                    </button>
+                  ))}
+                </div>
+                {/* Duration + effort */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Duration (min)</div>
+                    <input style={{width:"100%",background:"var(--sf)",border:"1.5px solid var(--br)",borderRadius:10,
+                      padding:"9px 12px",color:"var(--tx)",fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,outline:"none"}}
+                      type="number" inputMode="numeric" placeholder="45"
+                      value={wForm.duration} onChange={e=>setWForm(f=>({...f,duration:e.target.value}))}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Effort</div>
+                    <div className="wf-effort-row">
+                      {["Easy","Moderate","Hard"].map(e=>(
+                        <button key={e} className={`wf-effort-btn ${wForm.effort===e?"on":""}`}
+                          style={wForm.effort===e?{
+                            borderColor:e==="Easy"?"var(--acc)":e==="Moderate"?"var(--warn)":"var(--red)",
+                            background:e==="Easy"?"#008F6B18":e==="Moderate"?"#B86E0018":"#C9353518",
+                            color:e==="Easy"?"var(--acc)":e==="Moderate"?"var(--warn)":"var(--red)",
+                          }:{}}
+                          onClick={()=>setWForm(f=>({...f,effort:e}))}>
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {/* Sport name */}
+                {wForm.type==="sport"&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Sport Name</div>
+                    <input style={{width:"100%",background:"var(--sf)",border:"1.5px solid var(--br)",borderRadius:10,
+                      padding:"9px 12px",color:"var(--tx)",fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:"none"}}
+                      placeholder="Basketball, Tennis…" value={wForm.sportName}
+                      onChange={e=>setWForm(f=>({...f,sportName:e.target.value}))}/>
+                  </div>
+                )}
+                {/* Muscle groups — weights only */}
+                {wForm.type==="weights"&&(
+                  <>
+                    <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:8}}>Sets per Muscle Group</div>
+                    <div className="mg-grid">
+                      {MUSCLE_GROUPS.map(g=>(
+                        <div key={g} className="mg-cell">
+                          <div className="mg-name">{g}</div>
+                          <div className="mg-stepper">
+                            <button className="mg-btn"
+                              onClick={()=>setWForm(f=>({...f,sets:{...f.sets,[g]:Math.max(0,f.sets[g]-1)}}))}>−</button>
+                            <div className="mg-val">{wForm.sets[g]}</div>
+                            <button className="mg-btn"
+                              onClick={()=>setWForm(f=>({...f,sets:{...f.sets,[g]:f.sets[g]+1}}))}>+</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {/* Notes */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Notes (optional)</div>
+                  <input style={{width:"100%",background:"var(--sf)",border:"1.5px solid var(--br)",borderRadius:10,
+                    padding:"9px 12px",color:"var(--tx)",fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:"none"}}
+                    placeholder="PR, felt strong…" value={wForm.notes}
+                    onChange={e=>setWForm(f=>({...f,notes:e.target.value}))}/>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btng" style={{flex:1}} onClick={()=>{setShowWForm(false);setWForm({type:"weights",duration:"",effort:"Moderate",notes:"",sportName:"",sets:DEF_SETS()});}}>Cancel</button>
+                  <button className="btn btnp" style={{flex:2}} disabled={!wForm.duration} onClick={addWorkout}>Log Workout</button>
+                </div>
+              </div>
+            ):(
+              <button style={{width:"100%",padding:"10px",borderRadius:12,border:"1.5px dashed var(--br)",
+                background:"transparent",color:"var(--acc)",fontFamily:"'DM Sans',sans-serif",
+                fontSize:13,cursor:"pointer",marginTop:(fitnessData.workouts||[]).length>0?6:0}}
+                onClick={()=>setShowWForm(true)}>
+                + Add Workout
+              </button>
+            )}
+          </div>
+
           {MEALS.map(meal=>{
             const items=dayLog[meal]||[];
             const loggedItems=items.filter(i=>i.state!=="recommended");
@@ -2571,10 +2888,11 @@ Write the weekly check-in.`
                     {loggedItems.map(item=>{
                       const dm=user.settings?.displayMacros||["cal","pro","carb","fat"];
                       return(
-                      <div key={item.logId} className="food-item">
+                      <div key={item.logId} className="food-item"
+                        onClick={()=>openEditItem(meal,item)}>
                         <div className="fi-name">
                           <div className="fi-title">{item.name}</div>
-                          <div className="fi-sub">{item.serving}</div>
+                          <div className="fi-sub">{item.serving}{item._servings&&item._servings!==1?` · ${item._servings}×`:""}</div>
                         </div>
                         <div className="fi-macros">
                           {dm.includes("pro")&&<span className="fi-mac" style={{color:"var(--pro)"}}>{item.pro}p</span>}
@@ -2582,7 +2900,7 @@ Write the weekly check-in.`
                           {dm.includes("fat")&&<span className="fi-mac" style={{color:"var(--fat)"}}>{item.fat}f</span>}
                         </div>
                         {dm.includes("cal")&&<div className="fi-cal">{item.cal}</div>}
-                        <button className="fi-del" onClick={()=>removeFoodFromMeal(meal,item.logId)}>✕</button>
+                        <button className="fi-del" onClick={e=>{e.stopPropagation();removeFoodFromMeal(meal,item.logId);}}>✕</button>
                       </div>
                     );})}
                     {recItems.map(item=>{
@@ -3014,6 +3332,35 @@ Write the weekly check-in.`
         <h2>Settings</h2>
 
         {/* Display prefs */}
+        {/* Coaching style */}
+        <div className="settings-section">
+          <div className="settings-section-title">✦ Coaching Style</div>
+          <div style={{fontSize:12,color:"var(--tx2)",marginBottom:4,lineHeight:1.5}}>
+            How Claude sounds in meal analysis, debriefs, and coaching responses.
+          </div>
+          <div className="coach-style-grid">
+            {[
+              {id:"encouraging", icon:"🤝", label:"Encouraging", sub:"Warm, motivating, positive framing"},
+              {id:"factual",     icon:"📊", label:"Factual",     sub:"Data-first, direct, minimal commentary"},
+              {id:"tough_love",  icon:"💪", label:"Tough Love",  sub:"Holds you accountable, no sugar-coating"},
+            ].map(s=>{
+              const active=(user.settings?.coachingStyle||"encouraging")===s.id;
+              const save=()=>{
+                const updated={...user,settings:{...user.settings,coachingStyle:s.id}};
+                setUser(updated); DB.set("nourish:profile",updated);
+              };
+              return(
+                <div key={s.id} className={`coach-style-card ${active?"on":""}`} onClick={save}>
+                  <div className="cs-icon">{s.icon}</div>
+                  <div className="cs-label">{s.label}</div>
+                  <div className="cs-sub">{s.sub}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Macro display */}
         <div className="settings-section">
           <div className="settings-section-title">Macro Display</div>
           <div className="settings-row">
@@ -3566,6 +3913,77 @@ Write the weekly check-in.`
             )}
           </div>
         </div>
+
+      {/* ── WEEKLY TRAINING ── */}
+      {(()=>{
+        const weekSets=Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
+        let totalWorkouts=0; let totalSteps=0;
+        weekFitness.forEach(day=>{
+          totalSteps+=(day.steps||0);
+          (day.workouts||[]).forEach(w=>{
+            totalWorkouts++;
+            MUSCLE_GROUPS.forEach(g=>{weekSets[g]+=(w.sets?.[g]||0);});
+          });
+        });
+        const underTrained=MUSCLE_GROUPS.filter(g=>weekSets[g]>0&&weekSets[g]<REC_SETS_MIN);
+        const dayLetters=["M","T","W","T","F","S","S"];
+        return(
+          <div className="body-section">
+            <div className="card" style={{marginBottom:0}}>
+              <div className="ctitle">💪 Weekly Training</div>
+              <div style={{display:"flex",gap:5,marginBottom:10}}>
+                {weekFitness.map((day,i)=>{
+                  const hasW=(day.workouts||[]).length>0;
+                  const isToday=day.date===todayStr();
+                  const dow=new Date(day.date+"T12:00:00").getDay();
+                  const li=dow===0?6:dow-1;
+                  return(
+                    <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      <div style={{width:"100%",height:10,borderRadius:3,
+                        background:hasW?"var(--acc)":"var(--br)",
+                        outline:isToday?"2px solid var(--acc2)":"none",outlineOffset:1}}/>
+                      <div style={{fontSize:9,color:isToday?"var(--acc2)":"var(--tx3)",fontWeight:isToday?700:400}}>
+                        {dayLetters[li]}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",gap:16,marginBottom:14}}>
+                <div style={{fontSize:12,color:"var(--tx2)"}}>
+                  <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:"var(--acc)"}}>{totalWorkouts}</span>{" "}workout{totalWorkouts!==1?"s":""} this week
+                </div>
+                {totalSteps>0&&<div style={{fontSize:12,color:"var(--tx2)"}}>
+                  <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:"var(--acc2)"}}>{totalSteps.toLocaleString()}</span>{" "}steps
+                </div>}
+              </div>
+              {MUSCLE_GROUPS.map(g=>{
+                const sets=weekSets[g];
+                const pct=Math.min(100,(sets/20)*100);
+                const color=sets===0?"var(--tx3)":sets>=REC_SETS_MIN?"var(--acc)":"var(--warn)";
+                return(
+                  <div key={g} className="vol-row">
+                    <div className="vol-label">{g}</div>
+                    <div className="vol-track"><div className="vol-fill" style={{width:`${pct}%`,background:sets===0?"var(--br)":color}}/></div>
+                    <div className="vol-count" style={{color}}>{sets}</div>
+                    <div className="vol-target">/10</div>
+                  </div>
+                );
+              })}
+              {underTrained.length>0&&(
+                <div style={{marginTop:12,background:"#B86E0010",border:"1.5px solid #B86E0030",borderRadius:12,padding:"10px 12px"}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--warn)",marginBottom:4}}>⚠ Under-trained this week</div>
+                  <div style={{fontSize:12,color:"var(--tx2)"}}>{underTrained.join(", ")} — under {REC_SETS_MIN} sets. Aim for 10–20 sets per muscle group per week.</div>
+                </div>
+              )}
+              {totalWorkouts===0&&(
+                <div style={{fontSize:12,color:"var(--tx3)",textAlign:"center",padding:"4px 0 4px"}}>Log a weights workout on the Log tab to track weekly sets</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       </div>
     );
   };
@@ -4375,6 +4793,79 @@ Write the weekly check-in.`
                 onClick={()=>askCoach()}>
                 Send
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Food edit sheet */}
+      {editItem&&(
+        <div className="overlay" onClick={e=>e.target===e.currentTarget&&setEditItem(null)}>
+          <div className="edit-sheet">
+            <div className="edit-sheet-head">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div className="edit-sheet-title">Edit Food</div>
+                <button className="sheet-close" onClick={()=>setEditItem(null)}>✕</button>
+              </div>
+              <div className="edit-sheet-sub">Tap any value to edit · serving multiplier recalculates macros</div>
+            </div>
+            <div className="edit-sheet-body">
+
+              {/* Name */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Food Name</div>
+                <input style={{width:"100%",background:"var(--sf2)",border:"1.5px solid var(--br)",borderRadius:12,
+                  padding:"11px 14px",color:"var(--tx)",fontFamily:"'DM Sans',sans-serif",fontSize:15,outline:"none"}}
+                  value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}/>
+              </div>
+
+              {/* Serving stepper */}
+              <div className="serving-stepper">
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"var(--tx)",marginBottom:2}}>Servings</div>
+                  <div className="edit-sheet-sub">{editItem._baseServing}</div>
+                </div>
+                <div className="serving-stepper-controls">
+                  <button className="stepper-btn"
+                    onClick={()=>applyServings(Math.max(0.5,+(editServings-0.5).toFixed(1)),editItem)}>−</button>
+                  <div className="stepper-val">{editServings}</div>
+                  <button className="stepper-btn"
+                    onClick={()=>applyServings(Math.min(20,+(editServings+0.5).toFixed(1)),editItem)}>+</button>
+                </div>
+              </div>
+
+              {/* Serving description */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:"var(--tx2)",textTransform:"uppercase",letterSpacing:".8px",marginBottom:6}}>Serving Description</div>
+                <input style={{width:"100%",background:"var(--sf2)",border:"1.5px solid var(--br)",borderRadius:12,
+                  padding:"11px 14px",color:"var(--tx)",fontFamily:"'DM Sans',sans-serif",fontSize:14,outline:"none"}}
+                  value={editForm.serving} onChange={e=>setEditForm(f=>({...f,serving:e.target.value}))}/>
+              </div>
+
+              {/* Macro grid */}
+              <div className="edit-macro-grid">
+                {[
+                  {key:"cal",label:"Calories",color:"var(--kcal)"},
+                  {key:"pro",label:"Protein (g)",color:"var(--pro)"},
+                  {key:"carb",label:"Carbs (g)",color:"var(--car)"},
+                  {key:"fat",label:"Fat (g)",color:"var(--fat)"},
+                ].map(m=>(
+                  <div key={m.key} className="edit-macro-cell">
+                    <div className="edit-macro-label">{m.label}</div>
+                    <input className="edit-macro-input" type="number" inputMode="decimal"
+                      style={{color:m.color}}
+                      value={editForm[m.key]}
+                      onChange={e=>setEditForm(f=>({...f,[m.key]:e.target.value}))}/>
+                  </div>
+                ))}
+              </div>
+
+            </div>
+            <div className="edit-sheet-foot">
+              <button className="btn btng" style={{flex:1}} onClick={()=>{
+                removeFoodFromMeal(editItem.meal,editItem.logId); setEditItem(null);
+              }}>Delete</button>
+              <button className="btn btnp" style={{flex:2}} onClick={saveEditedFood}>Save Changes</button>
             </div>
           </div>
         </div>
