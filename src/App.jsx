@@ -612,6 +612,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;heigh
 .vol-count{font-size:11px;font-weight:700;width:24px;text-align:right;flex-shrink:0}
 .vol-target{font-size:9px;color:var(--tx3);width:24px;text-align:right;flex-shrink:0}
 
+/* ── FOOD DATABASE SEARCH ── */
+.db-search-wrap{padding:4px 0 8px}
+.db-search-row{display:flex;gap:8px;margin-bottom:10px}
+.db-search-input{flex:1;background:var(--sf2);border:1.5px solid var(--br);border-radius:12px;
+  padding:11px 14px;color:var(--tx);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;-webkit-appearance:none}
+.db-search-input:focus{border-color:var(--acc)}
+.db-search-btn{padding:11px 16px;border-radius:12px;border:none;background:var(--acc);
+  color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.db-search-btn:active{transform:scale(.95)}
+.db-result{background:var(--sf);border:1.5px solid var(--br);border-radius:14px;
+  padding:11px 14px;display:flex;align-items:center;gap:10px;margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+.db-result:active{border-color:var(--acc)}
+.db-result-info{flex:1;min-width:0}
+.db-result-name{font-size:13px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.db-result-sub{font-size:11px;color:var(--tx2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.db-source-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;flex-shrink:0}
+.db-source-usda{background:#0072BE18;color:#0072BE}
+.db-source-off{background:#008F6B18;color:#008F6B}
+
 /* ── COACHING STYLE ── */
 .coach-style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .coach-style-card{border:1.5px solid var(--br);border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer;background:var(--sf);transition:all .15s}
@@ -1093,6 +1112,12 @@ export default function App() {
   const [weekFitness, setWeekFitness] = useState([]);
   const [showWForm,   setShowWForm]   = useState(false);
   const [wForm,       setWForm]       = useState({type:"weights",duration:"",effort:"Moderate",notes:"",sportName:"",sets:DEF_SETS()});
+
+  // ── Food database search state ──
+  const [dbQuery,     setDbQuery]     = useState("");
+  const [dbResults,   setDbResults]   = useState([]);
+  const [dbSearching, setDbSearching] = useState(false);
+  const [dbError,     setDbError]     = useState(null);
   const [sortBy,         setSortBy]         = useState("ratio");
   const [showSortMenu,   setShowSortMenu]   = useState(false);
   const [recommendingMeal, setRecommendingMeal] = useState(null); // { meals: {}, projectedTotals: {} }
@@ -1430,7 +1455,7 @@ Give a specific, insightful 2-3 sentence post-meal analysis and forward-looking 
       }
       setWeekFitness(days);
     })();
-  },[logDate]);
+  },[logDate, fitnessData]);
   const saveFitness=async(updated)=>{ setFitnessData(updated); await DB.set(fitnessKey(logDate),updated); };
   const logSteps=(v)=>saveFitness({...fitnessData,steps:+v||0});
   const addWorkout=()=>{
@@ -1721,6 +1746,7 @@ Write the weekly check-in.`
       setPhotoPreview(null); setLabelDraft(null);
       setLabelEditForm(null); setLabelServingIdx(0);
       setPhotoScanError(null); setScanningLabel(false);
+      setDbQuery(""); setDbResults([]); setDbError(null);
     }
   },[addModal]);
   const saveRecipes=async(updated)=>{ setRecipes(updated); await DB.set("nourish:recipes",updated); };
@@ -2020,6 +2046,34 @@ Write the weekly check-in.`
     const updated={...dayLog,[meal]:[...dayLog[meal],entry]};
     saveLog(updated);
     setAddModal(null); setSearch(""); setManForm({name:"",serving:"",cal:"",pro:"",carb:"",fat:""});
+  };
+
+  // ── Food database search ──
+  const searchFoodDB=async()=>{
+    if(!dbQuery.trim()||dbSearching) return;
+    setDbSearching(true); setDbResults([]); setDbError(null);
+    try{
+      const res=await fetch("/api/search",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({query:dbQuery.trim()}),
+      });
+      const data=await res.json();
+      if(data.results&&data.results.length>0) setDbResults(data.results);
+      else setDbError("No results found. Try a different search term.");
+    }catch{
+      setDbError("Search failed — check your connection.");
+    }
+    setDbSearching(false);
+  };
+  const addDBFood=(meal,food)=>{
+    const newId=uid();
+    const libEntry={...food,id:newId,custom:false,tags:[],source:"db"};
+    const newLib=[...library,libEntry];
+    setLibrary(newLib); DB.set("nourish:library",newLib);
+    const logEntry={...libEntry,logId:uid(),addedAt:new Date().toISOString()};
+    const updated={...dayLog,[meal]:[...dayLog[meal],logEntry]};
+    saveLog(updated);
+    setAddModal(null); setDbQuery(""); setDbResults([]);
   };
   const removeFoodFromMeal=(meal,logId)=>{
     saveLog({...dayLog,[meal]:dayLog[meal].filter(i=>i.logId!==logId)});
@@ -2955,7 +3009,7 @@ Write the weekly check-in.`
                 📷 Photo
               </button>
             </div>
-            {libTab!=="photo"&&<input className="search-input" placeholder="Search foods..." value={search}
+            {libTab!=="photo"&&libTab!=="search"&&<input className="search-input" placeholder="Search foods..." value={search}
               onChange={e=>setSearch(e.target.value)} autoFocus={false}/>}
             <div className="tab-strip">
               {[
@@ -2966,6 +3020,7 @@ Write the weekly check-in.`
                 {id:"protein",   label:"💪 High Protein"},
                 {id:"snacks",    label:"🍎 Snacks"},
                 {id:"recipes",   label:"📖 Recipes"},
+                {id:"search",    label:"🔍 Search"},
                 {id:"photo",     label:"📷 Photo"},
                 {id:"manual",    label:"+ Add New"},
               ].map(t=>(
@@ -2973,7 +3028,7 @@ Write the weekly check-in.`
               ))}
             </div>
             {/* Sort row */}
-            {libTab!=="manual"&&libTab!=="photo"&&(
+            {libTab!=="manual"&&libTab!=="photo"&&libTab!=="search"&&(
               <div style={{display:"flex",gap:6,marginBottom:12,overflow:"auto",scrollbarWidth:"none"}}>
                 <span style={{fontSize:11,color:"var(--tx2)",alignSelf:"center",flexShrink:0}}>Sort:</span>
                 {[{id:"ratio",l:"Best Ratio"},{id:"protein",l:"Protein"},{id:"cal",l:"Low Cal"},{id:"name",l:"A–Z"}].map(s=>(
@@ -3019,6 +3074,50 @@ Write the weekly check-in.`
                     );
                   })
                 )}
+              </div>
+            ) : libTab==="search"?(
+              <div className="db-search-wrap">
+                <div className="db-search-row">
+                  <input className="db-search-input" placeholder="Search millions of foods…"
+                    value={dbQuery} onChange={e=>setDbQuery(e.target.value)}
+                    onKeyDown={e=>e.key==="Enter"&&searchFoodDB()}
+                    autoFocus={false}/>
+                  <button className="db-search-btn" onClick={searchFoodDB} disabled={dbSearching}>
+                    {dbSearching?"…":"Search"}
+                  </button>
+                </div>
+                {dbSearching&&(
+                  <div style={{textAlign:"center",padding:"32px 0",color:"var(--tx2)",fontSize:13}}>
+                    Searching USDA + Open Food Facts…
+                  </div>
+                )}
+                {dbError&&!dbSearching&&(
+                  <div style={{textAlign:"center",padding:"24px 0",color:"var(--tx3)",fontSize:13}}>{dbError}</div>
+                )}
+                {!dbSearching&&dbResults.length===0&&!dbError&&(
+                  <div style={{textAlign:"center",padding:"24px 0",color:"var(--tx3)",fontSize:13,lineHeight:1.6}}>
+                    Search USDA and Open Food Facts<br/>
+                    <span style={{fontSize:12}}>Covers 3M+ branded and whole foods</span>
+                  </div>
+                )}
+                {dbResults.map((f,i)=>{
+                  const dm=user.settings?.displayMacros||["cal","pro","carb","fat"];
+                  return(
+                    <div key={i} className="db-result" onClick={()=>addDBFood(addModal.meal,f)}>
+                      <div className="db-result-info">
+                        <div className="db-result-name">{f.name}</div>
+                        <div className="db-result-sub">{[f.brand,f.serving].filter(Boolean).join(" · ")}</div>
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                        {dm.includes("pro")&&<span style={{fontSize:11,fontWeight:600,color:"var(--pro)"}}>{f.pro}p</span>}
+                        {dm.includes("cal")&&<span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"var(--kcal)"}}>{f.cal}</span>}
+                        <span className={`db-source-badge ${f.source==="usda"?"db-source-usda":"db-source-off"}`}>
+                          {f.source==="usda"?"USDA":"OFF"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : libTab==="photo"?(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -3914,15 +4013,17 @@ Write the weekly check-in.`
       {/* ── WEEKLY TRAINING ── */}
       {(()=>{
         const weekSets=Object.fromEntries(MUSCLE_GROUPS.map(g=>[g,0]));
-        let totalWorkouts=0; let totalSteps=0;
+        let totalWorkouts=0; let totalSteps=0; let walkDays=0;
         weekFitness.forEach(day=>{
           totalSteps+=(day.steps||0);
           (day.workouts||[]).forEach(w=>{
             totalWorkouts++;
+            if(w.type==="walk") walkDays++;
             MUSCLE_GROUPS.forEach(g=>{weekSets[g]+=(w.sets?.[g]||0);});
           });
         });
         const underTrained=MUSCLE_GROUPS.filter(g=>weekSets[g]>0&&weekSets[g]<REC_SETS_MIN);
+        const walkShort=walkDays<7;
         const dayLetters=["M","T","W","T","F","S","S"];
         return(
           <div className="body-section">
@@ -3954,6 +4055,14 @@ Write the weekly check-in.`
                   <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,color:"var(--acc2)"}}>{totalSteps.toLocaleString()}</span>{" "}steps
                 </div>}
               </div>
+              {/* Walk goal row */}
+              <div className="vol-row" style={{marginBottom:14}}>
+                <div className="vol-label">🚶 Walk</div>
+                <div className="vol-track"><div className="vol-fill" style={{width:`${Math.min(100,(walkDays/7)*100)}%`,background:walkDays>=7?"var(--acc2)":walkDays>=4?"var(--warn)":"var(--red)"}}/></div>
+                <div className="vol-count" style={{color:walkDays>=7?"var(--acc2)":walkDays>=4?"var(--warn)":"var(--red)"}}>{walkDays}</div>
+                <div className="vol-target">/7</div>
+              </div>
+
               {MUSCLE_GROUPS.map(g=>{
                 const sets=weekSets[g];
                 const pct=Math.min(100,(sets/20)*100);
@@ -3967,10 +4076,11 @@ Write the weekly check-in.`
                   </div>
                 );
               })}
-              {underTrained.length>0&&(
+              {(underTrained.length>0||walkShort)&&(
                 <div style={{marginTop:12,background:"#B86E0010",border:"1.5px solid #B86E0030",borderRadius:12,padding:"10px 12px"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"var(--warn)",marginBottom:4}}>⚠ Under-trained this week</div>
-                  <div style={{fontSize:12,color:"var(--tx2)"}}>{underTrained.join(", ")} — under {REC_SETS_MIN} sets. Aim for 10–20 sets per muscle group per week.</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--warn)",marginBottom:4}}>⚠ Goals not yet hit this week</div>
+                  {walkShort&&<div style={{fontSize:12,color:"var(--tx2)",marginBottom:underTrained.length>0?4:0}}>🚶 Walk — {walkDays}/7 days. Goal: 30-min walk every day.</div>}
+                  {underTrained.length>0&&<div style={{fontSize:12,color:"var(--tx2)"}}>{underTrained.join(", ")} — under {REC_SETS_MIN} sets. Aim for 10–20 sets per muscle group per week.</div>}
                 </div>
               )}
               {totalWorkouts===0&&(
